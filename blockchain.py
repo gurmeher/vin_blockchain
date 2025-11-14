@@ -1,15 +1,7 @@
-from flask import Flask, jsonify, request
-import hashlib
 import time
+import hashlib
 import json
 
-app = Flask(__name__)
-
-@app.route("/", methods=["GET"])
-def home():
-    return jsonify({"message": "CarChain API is running"}), 200
-
-#---------------------- Blockchain Class ---------------------#
 class Blockchain:
     def __init__(self):
         self.chain = []
@@ -37,14 +29,6 @@ class Blockchain:
     
     #record new transaction
     def add_transaction(self, transaction):
-        """
-        transaction = {
-            "vin": "...",
-            "prev_owner": "...",
-            "new_owner": "...",
-            "timestamp": ...
-        }
-        """
         self.pending_transactions.append(transaction)
         return self.get_previous_block()["index"] + 1
     
@@ -55,92 +39,55 @@ class Blockchain:
         return hashlib.sha256(block_string).hexdigest()
     
     #makes it so mining requires work to get a new block that works
-    def proof_of_work(self):
+    def proof_of_work(self, previous_nonce, previous_hash):
         """
         Simple Proof of Work:
-        - Find a nonce such that hash(previous_nonce, nonce) starts with '0000'
+        - Find a nonce such that hash(previous_nonce, previous_hash, nonce) starts with '0000'
         - This makes mining require real computational work
         """
         nonce = 0
         while True:
-            guess = f"{previous_nonce}{nonce}".encode()
-            guess_hash = hashlib.sha256(guess).hexdigest()
-            if guess_hash[:4] == "0000":
+            guess = f"{previous_nonce}{previous_hash}{nonce}".encode()
+            if hashlib.sha256(guess).hexdigest()[:4] == "0000":
                 return nonce
             nonce += 1
 
-blockchain = Blockchain()
+    #retrieve ownership history for a specific VIN
+    def get_vin_history(self, vin):
+        history = [
+            txn
+            for block in self.chain
+            for txn in block["transactions"]
+            if txn.get("vin") == vin
+        ]
 
-#---------------------- API Endpoints ---------------------#
-#sends back the entire blockchain as a JSON response
-@app.route("/chain", methods=["GET"])
-def get_chain():
-    response = {
-        "length": len(blockchain.chain),
-        "chain": blockchain.chain
-    }
-    return jsonify(response), 200
+        history.extend([txn for txn in self.pending_transactions if txn.get("vin") == vin])
+        return history
 
+    
+    #get the latest state of a VIN
+    def get_latest_vin_state(self, vin):
+        history = self.get_vin_history(vin)
+        if not history:
+            return {"exists": False}
 
-#add a vin transaction, accepts data like:
-'''{
-  "vin": "1HGCM82633A123456",
-  "prev_owner": "Alice",
-  "new_owner": "Bob",
-  "timestamp": 1713050000
-}'''
-@app.route("/transaction/new", methods=["POST"])
-def new_transaction():
-    values = request.get_json()
+        owner = None
+        last_mileage = None
+        registered = False
 
-    required_fields = ["vin", "prev_owner", "new_owner", "timestamp"]
-    if not all(field in values for field in required_fields):
-        return jsonify({"error": "Missing transaction fields"}), 400
+        for txn in history:
+            ttype = txn.get("type")
+            if ttype == "register_vehicle":
+                registered = True
+                owner = txn["owner"]
+                last_mileage = 0
+            elif registered and ttype == "transfer_ownership":
+                owner = txn["to"]
+            elif registered and ttype == "odometer_update":
+                last_mileage = txn["mileage"]
 
-    index = blockchain.add_transaction(values)
-
-    return jsonify({
-        "message": f"Transaction will be added to Block {index}"
-    }), 201
-
-
-#turn pending transactions into a block
-@app.route("/mine", methods=["GET"])
-def mine_block():
-    previous_block = blockchain.get_previous_block()
-    previous_hash = blockchain.hash(previous_block)
-
-    #in future we'll run real PoW here
-    nonce = blockchain.proof_of_work()
-
-    block = blockchain.create_block(nonce, previous_hash)
-
-    response = {
-        "message": "Block mined successfully!",
-        "index": block["index"],
-        "transactions": block["transactions"],
-        "nonce": block["nonce"],
-        "previous_hash": block["previous_hash"]
-    }
-    return jsonify(response), 200
-
-
-#retrieve the ownership history of a specific VIN
-@app.route("/vin/<vin>", methods=["GET"])
-def get_vin_history(vin):
-    history = []
-
-    for block in blockchain.chain:
-        for tx in block["transactions"]:
-            if tx["vin"] == vin:
-                history.append(tx)
-
-    return jsonify({
-        "vin": vin,
-        "history": history,
-        "records_found": len(history)
-    }), 200
-
-#---------------------- Run the app ---------------------#
-if __name__ == "__main__": #if file run, name becomes main and this will run
-    app.run(host="0.0.0.0", port=3000)
+        return {
+            "exists": registered,
+            "owner": owner if registered else None,
+            "last_mileage": last_mileage if registered else None
+        }
