@@ -160,14 +160,6 @@ curl -X POST http://localhost:3000/vin/odometer \
 curl http://localhost:3000/vin/1HGBH41JXMN109186
 ```
 
-## Contributing
-
-Contributions are welcome! Please submit a Pull Request.
-
-## License
-
-This project is open source and available under the MIT License.
-
 ## Note
 
 This is an educational project demonstrating blockchain concepts. For production use, additional security measures, consensus mechanisms, and validation would be required.
