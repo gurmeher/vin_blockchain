@@ -14,7 +14,10 @@
 
 <body class="container py-4">
 
-    <h1 class="text-center mb-4">Dashboard</h1>
+    <h1 class="text-center mb-2">Dashboard</h1>
+    <p id="serverStatus" class="text-center text-muted mb-4">
+    Checking server status...
+    </p>
 
     <!-- Blockchain -->
     <div class="card">
@@ -79,6 +82,21 @@
     </div>
 
 <script> 
+    async function wakeServer() {
+        const status = document.getElementById("serverStatus");
+        status.textContent = "⏳ Waking server...";
+
+        try {
+            const res = await fetch(`${API}/`);
+            const data = await res.json();
+
+            status.textContent = "✅ Server is online!";
+            // fade out after a few seconds
+            setTimeout(() => { status.textContent = ""; }, 3000);
+        } catch (err) {
+            status.textContent = "⏳ Still waking server...";
+        }
+    }
     const API = "https://vin-blockchain.onrender.com";
 
     function log(id, data) {
@@ -146,6 +164,8 @@
         const res = await fetch(`${API}/vin/${vin}`);
         log("historyOutput", await res.json());
     }
+
+    window.addEventListener("load", wakeServer);
 </script>
 
 </body>
